@@ -1,0 +1,9 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+data/app_data.json
+data/users.json
+data/sessions.json
+data/users/
+data/faiss_index/
