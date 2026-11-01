@@ -907,11 +907,11 @@ def build_chat_request(payload: ChatPayload, user_id: str):
         notes_block = "<notes>No relevant knowledge-base notes were found for this question.</notes>"
 
     profile = (load_data(user_id).get("profile") or {})
-    student = (f"Student context: target role = {profile.get('targetRole', 'not set')}; "
-               f"level = {profile.get('level', 'not set')}; domain track = {profile.get('domain', 'not set')}.")
+    # student = (f"Student context: target role = {profile.get('targetRole', 'not set')}; "
+    #            f"level = {profile.get('level', 'not set')}; domain track = {profile.get('domain', 'not set')}.")
     messages = [("system", CHAT_SYSTEM_PROMPT)]
     messages += _history_messages(payload.history)
-    messages.append(("human", f"{student}\n\n{notes_block}\n\nQuestion:\n{safe_question}"))
+    messages.append(("human", f"{notes_block}\n\nQuestion:\n{safe_question}"))
     return None, messages, list(dict.fromkeys(name for name, _ in hits))
 
 
