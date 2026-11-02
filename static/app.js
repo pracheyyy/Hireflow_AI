@@ -101,24 +101,114 @@ function renderProfile(){const name=appData.profile?.name||'Student';$('#greetin
 function renderAll(){ensureProgressShape();renderProfile();renderTasks();renderProgress()}
 function showModal(title,eyebrow,html){$('#modalTitle').textContent=title;$('#modalEyebrow').textContent=eyebrow;$('#modalContent').innerHTML=html;$('#modalBackdrop').classList.add('show');$('#modalContent').scrollTop=0}
 function closeModal(){$('#modalBackdrop').classList.remove('show')}
-function openBlock(name){
- currentBlock=name;ensureProgressShape();const b=appData.progress[name];if(!b)return;
- const domainSelect=name==='DOMAIN'?`<div class="field"><label>Choose your domain</label><select id="domainTrack">${Object.keys(DOMAIN_CURRICULA).map(d=>`<option ${d===(appData.profile.domain||'Web Development')?'selected':''}>${escapeHtml(d)}</option>`).join('')}</select></div>`:'';
- const groups=curriculumFor(name);const doneSet=new Set(b.doneItems||[]);
- const groupHtml=groups.map(g=>`<section class="syllabus-group"><h3>${escapeHtml(g.group)}</h3>${g.items.map(item=>{const id=`${name}|${g.group}|${item}`;return `<label class="block-topic"><input type="checkbox" data-curriculum-item="${escapeHtml(id)}" ${doneSet.has(id)?'checked':''}><span>${escapeHtml(item)}</span><small>${doneSet.has(id)?'Done':'To do'}</small></label>`}).join('')}</section>`).join('');
- showModal(name==='CORE SUB'?'Core subjects':name==='DOMAIN'?'Domain syllabus':name,'SYLLABUS & PROGRESS',`<p class="section-intro">Follow the syllabus topic by topic. Tick an item when you finish it; your progress is saved automatically.</p>${domainSelect}<div class="syllabus-summary"><b id="syllabusCount">${doneSet.size}</b> / <span id="syllabusTotal">${groups.reduce((n,g)=>n+g.items.length,0)}</span> items complete <div class="meter"><i id="syllabusMeter" style="width:${Math.round(doneSet.size/Math.max(1,groups.reduce((n,g)=>n+g.items.length,0))*100)}%"></i></div></div><div id="topicRows">${groupHtml}</div>`);
- if(name==='DOMAIN')$('#domainTrack').onchange=async e=>{const previous=appData.profile.domain||'Web Development';appData.domainProgress=appData.domainProgress||{};appData.domainProgress[previous]=[...(b.doneItems||[])];appData.profile.domain=e.target.value;b.doneItems=[...(appData.domainProgress[e.target.value]||[])];b.percent=Math.round(b.doneItems.length/Math.max(1,flattenCurriculum(name).length)*100);await persist();renderProgress();openBlock(name);};
- $$('[data-curriculum-item]').forEach(c=>c.onchange=async()=>{const id=c.dataset.curriculumItem;const set=new Set(b.doneItems||[]);const wasDone=set.has(id);c.checked?set.add(id):set.delete(id);b.doneItems=[...set];const total=flattenCurriculum(name).length;b.percent=Math.round(b.doneItems.length/Math.max(1,total)*100);if(c.checked&&!wasDone){appData.taskHistory=appData.taskHistory||[];appData.taskHistory.unshift({id:`topic-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,title:`${name==='CORE SUB'?'Core subjects':name==='DOMAIN'?'Domain skills':name}: ${id.split('|').slice(1).join(' — ')}`,completedAt:new Date().toISOString(),type:'syllabus'});}if(name==='DOMAIN'){appData.domainProgress=appData.domainProgress||{};appData.domainProgress[appData.profile.domain||'Web Development']=[...b.doneItems];}const label=c.closest('.block-topic')?.querySelector('small');if(label)label.textContent=c.checked?'Done':'To do';const count=$('#syllabusCount');if(count)count.textContent=b.doneItems.length;const meter=$('#syllabusMeter');if(meter)meter.style.width=b.percent+'%';await persist();renderProgress();});
+
+
+function openBlock(name) {
+    currentBlock = name;
+    ensureProgressShape();
+
+    const b = appData.progress[name];
+    if (!b) return;
+
+    const domainSelect = name === 'DOMAIN'
+        ? `<div class="field">
+             <label>Choose your domain</label>
+             <select id="domainTrack">
+               ${Object.keys(DOMAIN_CURRICULA).map(d =>
+                   `<option ${d === (appData.profile.domain || 'Web Development') ? 'selected' : ''}>${escapeHtml(d)}</option>`
+               ).join('')}
+             </select>
+           </div>`
+        : '';
+
+    const groups = curriculumFor(name);
+    const doneSet = new Set(b.doneItems || []);
+
+    const groupHtml = groups.map(g =>
+        `<section class="syllabus-group">
+            <h3>${escapeHtml(g.group)}</h3>
+            ${g.items.map(item => {
+                const id = `${name}|${g.group}|${item}`;
+                return `<label class="block-topic">
+                    <input type="checkbox" data-curriculum-item="${escapeHtml(id)}" ${doneSet.has(id) ? 'checked' : ''}>
+                    <span>${escapeHtml(item)}</span>
+                    <small>${doneSet.has(id) ? 'Done' : 'To do'}</small>
+                </label>`;
+            }).join('')}
+        </section>`
+    ).join('');
+
+    const totalItems = groups.reduce((n, g) => n + g.items.length, 0);
+
+    showModal(
+        name === 'CORE SUB' ? 'Core subjects' : name === 'DOMAIN' ? 'Domain syllabus' : name,
+        'SYLLABUS & PROGRESS',
+        `<p class="section-intro">Follow the syllabus topic by topic. Tick an item when you finish it; your progress is saved automatically.</p>
+        ${domainSelect}
+        <div class="syllabus-summary">
+            <b id="syllabusCount">${doneSet.size}</b> /
+            <span id="syllabusTotal">${totalItems}</span> items complete
+            <div class="meter">
+                <i id="syllabusMeter" style="width:${Math.round(doneSet.size / Math.max(1, totalItems) * 100)}%"></i>
+            </div>
+        </div>
+        <div id="topicRows">${groupHtml}</div>`
+    );
+
+    if (name === 'DOMAIN') {
+        $('#domainTrack').onchange = async e => {
+            const previous = appData.profile.domain || 'Web Development';
+
+            appData.domainProgress = appData.domainProgress || {};
+            appData.domainProgress[previous] = [...(b.doneItems || [])];
+
+            appData.profile.domain = e.target.value;
+            b.doneItems = [...(appData.domainProgress[e.target.value] || [])];
+
+            b.percent = Math.round(
+                b.doneItems.length / Math.max(1, flattenCurriculum(name).length) * 100
+            );
+
+            await persist();
+            renderProgress();
+            openBlock(name);
+        };
+    }
+
+    $$('[data-curriculum-item]').forEach(c => c.onchange = async () => {
+        const id = c.dataset.curriculumItem;
+        const set = new Set(b.doneItems || []);
+
+        c.checked ? set.add(id) : set.delete(id);
+
+        b.doneItems = [...set];
+
+        const total = flattenCurriculum(name).length;
+        b.percent = Math.round(
+            b.doneItems.length / Math.max(1, total) * 100
+        );
+
+        // Save domain-specific progress separately
+        if (name === 'DOMAIN') {
+            appData.domainProgress = appData.domainProgress || {};
+            appData.domainProgress[appData.profile.domain || 'Web Development'] = [...b.doneItems];
+        }
+
+        const label = c.closest('.block-topic')?.querySelector('small');
+        if (label) label.textContent = c.checked ? 'Done' : 'To do';
+
+        const count = $('#syllabusCount');
+        if (count) count.textContent = b.doneItems.length;
+
+        const meter = $('#syllabusMeter');
+        if (meter) meter.style.width = b.percent + '%';
+
+        await persist();
+        renderProgress();
+    });
 }
-const PLAN_CAT={'DSA':'dsa','Core CS':'core','Aptitude':'aptitude','Domain':'domain','Mock Interview':'mock','Revision':'rev','Resume':'resume'};
-function fmtMins(m){const h=Math.floor(m/60),r=m%60;return h?(r?`${h}h ${r}m`:`${h}h`):`${r}m`}
-function renderPlan(plan,fallbackText=''){
- if(!plan||!Array.isArray(plan.days)||!plan.days.length)return `<div class="ats-feedback-content plan-fallback">${formatATSFeedback(fallbackText)}</div>`;
- const total=plan.days.reduce((n,d)=>n+(d.totalMinutes||0),0);
- const days=plan.days.map((d,di)=>`<article class="plan-day"><header class="plan-day-head"><span class="plan-day-num">Day ${d.day}</span><div class="plan-day-title"><h3>${escapeHtml(d.title)}</h3>${d.focus?`<p>${escapeHtml(d.focus)}</p>`:''}</div><span class="plan-day-time">${fmtMins(d.totalMinutes||0)}</span></header><ul class="plan-tasks">${d.tasks.map((t,ti)=>`<li class="plan-task"><span class="plan-cat ${PLAN_CAT[t.category]||'domain'}">${escapeHtml(t.category)}</span><div class="plan-task-main"><b>${escapeHtml(t.title)}</b>${t.detail?`<small>${escapeHtml(t.detail)}</small>`:''}</div><span class="plan-min">${t.minutes} min</span><button type="button" class="plan-add" data-plan-add="${di}-${ti}" title="Add to today's tasks" aria-label="Add to today's tasks">+</button></li>`).join('')}</ul></article>`).join('');
- const check=plan.checklist?.length?`<section class="plan-check"><h3>Weekly checklist</h3><ul>${plan.checklist.map(c=>`<li><span></span>${escapeHtml(c)}</li>`).join('')}</ul></section>`:'';
- return `<div class="plan-summary"><div><span class="ats-kicker">YOUR 7-DAY PLAN</span><p>${escapeHtml(plan.summary||'A focused week built around your goals.')}</p></div><div class="plan-stat"><strong>${fmtMins(total)}</strong><span>total this week</span></div></div>${days}${check}`;
-}
+
+
 function bindPlan(plan){
  $$('[data-plan-add]').forEach(b=>b.onclick=async()=>{const [di,ti]=b.dataset.planAdd.split('-').map(Number);const t=plan?.days?.[di]?.tasks?.[ti];if(!t)return;appData.tasks.push({id:Date.now()+ti,title:`${t.title} (${t.minutes} min)`,done:false,date:new Date().toISOString().slice(0,10),createdAt:new Date().toISOString()});await persist();renderTasks();renderSnapshot();b.textContent='✓';b.disabled=true;notify("Added to today's tasks")});
 }
