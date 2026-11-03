@@ -43,8 +43,40 @@
 </div></section>
   <section class="section-heading"><div><h2>Your preparation, at a glance</h2><p>Choose a block to update your progress.</p></div><button class="subtle-button" data-open="progress">View all progress <span>→</span></button></section>
   <section class="progress-grid" id="homeProgress"></section>
+
+  <!-- new added  -->
+  <!-- ACTIVE PREPARATION ROADMAP -->
+<section class="roadmap-dashboard-section" id="roadmapDashboard">
+    <div class="roadmap-dashboard-card">
+        <div class="roadmap-dashboard-info">
+            <span class="roadmap-kicker">YOUR ACTIVE LEARNING PLAN</span>
+            <h2 id="roadmapDashboardTitle">My Preparation Roadmap</h2>
+            <p id="roadmapDashboardDescription">
+                Follow your personalized preparation journey.
+            </p>
+        </div>
+
+        <div class="roadmap-dashboard-progress">
+            <div class="roadmap-progress-details">
+                <strong id="roadmapPercent">0%</strong>
+                <span id="roadmapTaskCount">0 / 0 tasks completed</span>
+            </div>
+
+            <div class="roadmap-progress-track">
+                <div id="roadmapProgressBar"></div>
+            </div>
+        </div>
+
+        <button type="button" class="primary-btn" id="openActiveRoadmap">
+            Open my roadmap →
+        </button>
+    </div>
+</section>
+
   <section class="quick-grid"><button class="quick-card" data-open="ats"><span class="quick-icon peach">▤</span><span><b>ATS resume checker</b><small>Match your resume to a role</small></span><span class="quick-arrow">↗</span></button><button class="quick-card" data-open="planner"><span class="quick-icon yellow">✳</span><span><b>Planeyy AI planner</b><small>A plan that fits your day</small></span><span class="quick-arrow">↗</span></button><button class="quick-card" data-open="opportunities"><span class="quick-icon lilac">⌁</span><span><b>Career opportunities</b><small>Explore internships & jobs</small></span><span class="quick-arrow">↗</span></button></section>
-  <section class="bottom-grid"><div class="panel snapshot-panel"><div class="panel-head"><div><h3>Your snapshot</h3><p>See how your effort adds up.</p></div><span class="snapshot-icon">↗</span></div><div class="snapshot-number"><strong id="overallPercent">0%</strong><span>overall progress</span></div><div class="meter"><i id="overallMeter" style="width:0%"></i></div><div class="snapshot-foot"><span><i class="green-dot"></i><b id="doneCount">0</b> tasks completed</span><button class="text-button" data-open="progress">Details →</button></div></div></section>
+  <section class="bottom-grid"><div class="panel snapshot-panel"><div class="panel-head"><div><h3>Your snapshot</h3><p>See how your effort adds up.</p></div><span class="snapshot-icon">↗</span></div><div class="snapshot-number"><strong id="overallPercent">0%</strong><span>overall progress</span></div><div class="meter"><i id="overallMeter" style="width:0%"></i></div><div class="snapshot-foot">
+    <span><i class="green-dot"></i><b id="doneCount">0</b> tasks completed</span>
+    <button class="text-button" data-open="progress">Details →</button></div></div></section>
   <footer>Made for your next step <span>✦</span> <span class="footer-right">HireFlow AI · Prepare smarter</span></footer>
 </main>
 </div>

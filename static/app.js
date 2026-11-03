@@ -520,11 +520,20 @@ function renderProfile() {
     $('.avatar-top').textContent = name.slice(0, 1).toUpperCase();
 }
 
+// function renderAll() {
+//     ensureProgressShape();
+//     renderProfile();
+//     renderTasks();
+//     renderProgress();
+// }
 function renderAll() {
     ensureProgressShape();
+    ensureRoadmapState();
+
     renderProfile();
     renderTasks();
     renderProgress();
+    renderRoadmapDashboard();
 }
 
 function showModal(title, eyebrow, html) {
@@ -833,122 +842,626 @@ function openBlock(name) {
 // PLANNER
 // ==========================================
 
-function bindPlan(plan) {
-    $$('[data-plan-add]').forEach(b =>
-        b.onclick = async () => {
-            const [di, ti] = b.dataset.planAdd.split('-').map(Number);
-            const t = plan?.days?.[di]?.tasks?.[ti];
+// function renderPlan(plan, fallbackText = '') {
+//     if (!plan || !Array.isArray(plan.days)) {
+//         return markdownToHtml(fallbackText || 'No plan available yet.');
+//     }
 
-            if (!t) return;
+//     return plan.days.map((day, di) => `
+//         <section class="plan-day">
+//             <h3>${escapeHtml(day.title || `Day ${di + 1}`)}</h3>
 
-            appData.tasks.push({
-                id: Date.now() + ti,
-                title: `${t.title} (${t.minutes} min)`,
-                done: false,
-                date: new Date().toISOString().slice(0, 10),
-                createdAt: new Date().toISOString()
+//             ${(day.tasks || []).map((task, ti) => `
+//                 <div class="plan-task">
+//                     <div>
+//                         <strong>${escapeHtml(task.title || 'Study task')}</strong>
+//                         <small>${Number(task.minutes) || 0} minutes</small>
+//                     </div>
+
+//                     <button
+//                         type="button"
+//                         class="secondary-btn"
+//                         data-plan-add="${di}-${ti}"
+//                     >
+//                         + Add to tasks
+//                     </button>
+//                 </div>
+//             `).join('')}
+//         </section>
+//     `).join('');
+// }
+
+
+function renderPlan(plan, fallbackText = '') {
+    if (!plan || !Array.isArray(plan.days)) {
+        return markdownToHtml(fallbackText || 'No plan available yet.');
+    }
+
+    return plan.days.map((day, di) => `
+        <section class="plan-day">
+            <h3>${escapeHtml(day.title || `Day ${di + 1}`)}</h3>
+
+            ${(day.tasks || []).map(task => `
+                <div class="plan-task">
+                    <div>
+                        <strong>${escapeHtml(task.title || 'Study task')}</strong>
+                        <small>${Number(task.minutes) || 0} minutes</small>
+                    </div>
+                </div>
+            `).join('')}
+        </section>
+    `).join('');
+}
+
+
+// ==========================================
+// INDEPENDENT ROADMAP TRACKER
+// ==========================================
+
+function ensureRoadmapState() {
+    appData.plans = appData.plans || [];
+
+    appData.plans.forEach((plan, index) => {
+        if (!plan.id) {
+            plan.id = `roadmap-${Date.now()}-${index}`;
+        }
+
+        plan.completedTaskIds = Array.isArray(plan.completedTaskIds)
+            ? plan.completedTaskIds
+            : [];
+    });
+
+    appData.roadmapProgress = appData.roadmapProgress || {
+        activePlanId: null
+    };
+
+    if (
+        !appData.plans.some(
+            p => p.id === appData.roadmapProgress.activePlanId
+        )
+    ) {
+        appData.roadmapProgress.activePlanId =
+            appData.plans[0]?.id || null;
+    }
+}
+
+
+function getActiveRoadmap() {
+    ensureRoadmapState();
+
+    return appData.plans.find(
+        p => p.id === appData.roadmapProgress.activePlanId
+    ) || null;
+}
+
+
+function getRoadmapStats(plan) {
+    const tasks = [];
+
+    (plan?.structured?.days || []).forEach((day, di) => {
+        (day.tasks || []).forEach((task, ti) => {
+            tasks.push({
+                id: `${di}-${ti}`,
+                title: task.title || 'Study task',
+                minutes: Number(task.minutes) || 0,
+                day: di + 1,
+                dayTitle: day.title || `Day ${di + 1}`
             });
+        });
+    });
+
+    const completed = plan?.completedTaskIds || [];
+    const done = tasks.filter(t => completed.includes(t.id)).length;
+    const total = tasks.length;
+
+    return {
+        tasks,
+        done,
+        total,
+        remaining: total - done,
+        percent: total ? Math.round(done / total * 100) : 0
+    };
+}
+
+
+function renderRoadmapDashboard() {
+    const section = $('#roadmapDashboard');
+
+    if (!section) return;
+
+    const plan = getActiveRoadmap();
+
+    if (!plan || !plan.structured?.days?.length) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = '';
+
+    const stats = getRoadmapStats(plan);
+    const duration = plan.structured.days.length;
+
+    $('#roadmapDashboardTitle').textContent =
+        plan.title || `${plan.role || 'Preparation'} Roadmap`;
+
+    $('#roadmapDashboardDescription').textContent =
+        `${duration}-day personalized preparation plan`;
+
+    $('#roadmapPercent').textContent = `${stats.percent}%`;
+
+    $('#roadmapTaskCount').textContent =
+        `${stats.done} / ${stats.total} tasks completed`;
+
+    $('#roadmapProgressBar').style.width =
+        `${stats.percent}%`;
+
+    $('#openActiveRoadmap').onclick = openActiveRoadmap;
+}
+
+
+function openActiveRoadmap() {
+    const plan = getActiveRoadmap();
+
+    if (!plan) {
+        notify('Generate a roadmap first');
+        return;
+    }
+
+    renderRoadmapPage(plan);
+}
+
+
+function renderRoadmapPage(plan) {
+    const stats = getRoadmapStats(plan);
+
+    const completedSet = new Set(plan.completedTaskIds || []);
+
+    const pendingTasks = stats.tasks.filter(
+        task => !completedSet.has(task.id)
+    );
+
+    const completedTasks = stats.tasks.filter(
+        task => completedSet.has(task.id)
+    );
+
+    const renderTask = task => `
+        <label class="roadmap-check-row">
+            <input
+                type="checkbox"
+                data-roadmap-task="${task.id}"
+                ${completedSet.has(task.id) ? 'checked' : ''}
+            >
+
+            <span class="roadmap-check-content">
+                <strong>${escapeHtml(task.title)}</strong>
+                <small>
+                    Day ${task.day} · ${task.minutes} minutes
+                </small>
+            </span>
+        </label>
+    `;
+
+    const pendingHtml = pendingTasks.length
+        ? pendingTasks.map(renderTask).join('')
+        : `<div class="empty-state">All roadmap tasks completed!</div>`;
+
+    const completedHtml = completedTasks.length
+        ? completedTasks.map(renderTask).join('')
+        : `<div class="helper">Completed tasks will appear here.</div>`;
+
+    showModal(
+        plan.title || `${plan.role || 'Preparation'} Roadmap`,
+        'YOUR PREPARATION JOURNEY',
+
+        `
+        <div class="roadmap-detail-summary">
+
+            <div class="roadmap-detail-top">
+                <strong>${stats.percent}% completed</strong>
+                <span>${stats.done} of ${stats.total} tasks</span>
+            </div>
+
+            <div class="roadmap-progress-track">
+                <div style="width:${stats.percent}%"></div>
+            </div>
+
+            <p>
+                ${stats.remaining} tasks remaining ·
+                ${plan.structured.days.length} preparation days
+            </p>
+
+        </div>
+
+        <h3 class="roadmap-section-title">
+            Pending Tasks (${pendingTasks.length})
+        </h3>
+
+        <div id="roadmapPendingTasks">
+            ${pendingHtml}
+        </div>
+
+        <div class="roadmap-completed-section">
+            <h3 class="roadmap-section-title">
+                Completed Tasks (${completedTasks.length})
+            </h3>
+
+            <div id="roadmapCompletedTasks">
+                ${completedHtml}
+            </div>
+        </div>
+        `
+    );
+
+    bindRoadmapCheckboxes(plan);
+}
+
+
+function bindRoadmapCheckboxes(plan) {
+    $$('[data-roadmap-task]').forEach(input => {
+        input.onchange = async () => {
+            const taskId = input.dataset.roadmapTask;
+
+            const completed = new Set(plan.completedTaskIds || []);
+
+            if (input.checked) {
+                completed.add(taskId);
+            } else {
+                completed.delete(taskId);
+            }
+
+            plan.completedTaskIds = [...completed];
 
             await persist();
 
-            renderTasks();
-            renderSnapshot();
-
-            b.textContent = '✓';
-            b.disabled = true;
-
-            notify("Added to today's tasks");
-        }
-    );
+            renderRoadmapDashboard();
+            renderRoadmapPage(plan);
+        };
+    });
 }
+
+
+// function bindPlan(plan) {
+//     $$('[data-plan-add]').forEach(b =>
+//         b.onclick = async () => {
+//             const [di, ti] = b.dataset.planAdd.split('-').map(Number);
+//             const t = plan?.days?.[di]?.tasks?.[ti];
+
+//             if (!t) return;
+
+//             appData.tasks.push({
+//                 id: Date.now() + ti,
+//                 title: `${t.title} (${t.minutes} min)`,
+//                 done: false,
+//                 date: new Date().toISOString().slice(0, 10),
+//                 createdAt: new Date().toISOString()
+//             });
+
+//             await persist();
+
+//             renderTasks();
+//             renderSnapshot();
+
+//             b.textContent = '✓';
+//             b.disabled = true;
+
+//             notify("Added to today's tasks");
+//         }
+//     );
+// }
+
+// function openPlanner() {
+//     const p = appData.profile || {};
+
+//     showModal(
+//         'Your personal placement plan',
+//         'PLANEYY · AI PLANNER',
+
+//         `
+//         <p class="section-intro">
+//             Tell us what you're aiming for.
+//             HireFlow will create a practical 7-day plan
+//             around the time you have.
+//         </p>
+
+//         <form id="planForm">
+
+//             <div class="form-grid">
+
+//                 <div class="field">
+//                     <label>Target role</label>
+//                     <input name="role"
+//                         value="${escapeHtml(p.targetRole || 'Software Developer')}"
+//                         required>
+//                 </div>
+
+//                 <div class="field">
+//                     <label>Preparation level</label>
+
+//                     <select name="level">
+//                         <option ${p.level === 'Beginner' ? 'selected' : ''}>Beginner</option>
+//                         <option ${p.level === 'Intermediate' ? 'selected' : ''}>Intermediate</option>
+//                         <option ${p.level === 'Advanced' ? 'selected' : ''}>Advanced</option>
+//                     </select>
+//                 </div>
+
+//                 <div class="field">
+//                     <label>Hours available each day</label>
+//                     <input name="hours" type="number"
+//                         min="1" max="12"
+//                         value="${p.hours || 3}" required>
+//                 </div>
+
+//                 <div class="field">
+//                     <label>Target deadline (optional)</label>
+//                     <input name="deadline" type="date"
+//                         value="${escapeHtml(p.deadline || '')}">
+//                 </div>
+
+//             </div>
+
+//             <div class="field">
+//                 <label>Weak areas / priorities</label>
+
+//                 <textarea name="weakAreas"
+//                     placeholder="e.g. DSA, DBMS, Spring Boot">${escapeHtml(
+//                         Object.entries(appData.progress)
+//                             .filter(([k, v]) => v.percent < 50)
+//                             .map(([k]) => k)
+//                             .join(', ') || 'DSA, core subjects'
+//                     )}</textarea>
+//             </div>
+
+//             <button class="primary-btn" type="submit">
+//                 ✧ Generate my 7-day plan
+//             </button>
+
+//             <p class="helper">.</p>
+
+//         </form>
+
+//         <div id="planResult">
+//             ${
+//                 appData.plans?.[0]?.text
+//                     ? `<div class="plan-wrap">
+//                         <div class="plan-recent">Most recent plan</div>
+//                         ${renderPlan(
+//                             appData.plans[0].structured,
+//                             appData.plans[0].text
+//                         )}
+//                     </div>`
+//                     : ''
+//             }
+//         </div>
+//         `
+//     );
+
+//     bindPlan(appData.plans?.[0]?.structured);
+
+//     $('#planForm').onsubmit = async e => {
+//         e.preventDefault();
+
+//         const f = new FormData(e.target);
+//         const btn = e.target.querySelector('button');
+
+//         btn.disabled = true;
+//         btn.textContent = 'Building your plan…';
+
+//         try {
+//             const res = await api('/api/plan', {
+//                 method: 'POST',
+//                 body: JSON.stringify({
+//                     role: f.get('role'),
+//                     level: f.get('level'),
+//                     hours: +f.get('hours'),
+//                     deadline: f.get('deadline'),
+//                     weakAreas: f.get('weakAreas')
+//                 })
+//             });
+
+//             appData.profile.targetRole = f.get('role');
+//             appData.profile.level = f.get('level');
+//             appData.profile.hours = +f.get('hours');
+//             appData.profile.deadline = f.get('deadline');
+
+//             appData.plans = [
+//                 {
+//                     text: res.plan,
+//                     structured: res.structured || null,
+//                     role: f.get('role'),
+//                     level: f.get('level')
+//                 },
+//                 ...(appData.plans || [])
+//             ].slice(0, 10);
+
+//             await persist();
+
+//             $('#planResult').innerHTML = `
+//                 <div class="plan-wrap">
+//                     ${renderPlan(res.structured, res.plan)}
+
+//                     <button class="secondary-btn" id="copyPlan">
+//                         Copy plan
+//                     </button>
+//                 </div>
+//             `;
+
+//             bindPlan(res.structured);
+
+//             $('#copyPlan').onclick = () =>
+//                 navigator.clipboard.writeText(res.plan)
+//                     .then(() => notify('Plan copied'));
+
+//             notify('Your plan is ready');
+
+//         } catch (err) {
+//             $('#planResult').innerHTML =
+//                 `<div class="result-box">${escapeHtml(err.message)}</div>`;
+
+//         } finally {
+//             btn.disabled = false;
+//             btn.textContent = '✧ Generate my 7-day plan';
+//         }
+//     };
+// }
 
 function openPlanner() {
     const p = appData.profile || {};
 
+    const renderPlanHistory = () => {
+        const plans = appData.plans || [];
+
+        if (!plans.length) {
+            return `
+                <div style="font-size:13px; color:var(--muted); padding:10px 0;">
+                    No saved roadmaps yet.
+                </div>
+            `;
+        }
+
+        return plans.map((plan, index) => {
+            const title = plan.title ||
+                (plan.role ? `${plan.role} Roadmap` : 'Preparation Roadmap');
+
+            return `
+                <button
+                    type="button"
+                    class="plan-history-item"
+                    data-plan-history="${index}"
+                    style="
+                        display:flex;
+                        align-items:center;
+                        justify-content:space-between;
+                        width:100%;
+                        padding:11px 14px;
+                        margin-bottom:6px;
+                        border:1px solid var(--border);
+                        border-radius:10px;
+                        background:var(--surface);
+                        color:inherit;
+                        text-align:left;
+                        font-size:13px;
+                        cursor:pointer;
+                    "
+                >
+                    <span>${escapeHtml(title)}</span>
+                    <span style="color:var(--muted);">›</span>
+                </button>
+            `;
+        }).join('');
+    };
+
+    const bindPlanHistory = () => {
+        document.querySelectorAll('[data-plan-history]').forEach(btn => {
+            btn.onclick = () => {
+                const index = Number(btn.dataset.planHistory);
+                const plan = appData.plans?.[index];
+
+                if (!plan) return;
+
+                $('#planResult').innerHTML = `
+                    <div class="plan-wrap">
+                        <div class="plan-recent">
+                            ${escapeHtml(plan.title || plan.role || 'Saved roadmap')}
+                        </div>
+
+                        ${renderPlan(plan.structured, plan.text || '')}
+                    </div>
+                `;
+            };
+        });
+    };
+
     showModal(
-        'Your personal placement plan',
+        'Build your personalized roadmap',
         'PLANEYY · AI PLANNER',
 
         `
         <p class="section-intro">
-            Tell us what you're aiming for.
-            HireFlow will create a practical 7-day plan
-            around the time you have.
+            Tell us about your target role, current skills and available time.
+            Planeyy AI will create a realistic roadmap with a flexible duration.
         </p>
 
         <form id="planForm">
 
+            <div class="field">
+                <label>Target role</label>
+                <input
+                    name="role"
+                    value="${escapeHtml(p.targetRole || 'Software Developer')}"
+                    placeholder="e.g. SDE at a product-based company"
+                    required
+                >
+            </div>
+
             <div class="form-grid">
 
                 <div class="field">
-                    <label>Target role</label>
-                    <input name="role"
-                        value="${escapeHtml(p.targetRole || 'Software Developer')}"
-                        required>
-                </div>
-
-                <div class="field">
-                    <label>Preparation level</label>
-
+                    <label>Current preparation level</label>
                     <select name="level">
                         <option ${p.level === 'Beginner' ? 'selected' : ''}>Beginner</option>
-                        <option ${p.level === 'Intermediate' ? 'selected' : ''}>Intermediate</option>
+                        <option ${p.level === 'Intermediate' || !p.level ? 'selected' : ''}>Intermediate</option>
                         <option ${p.level === 'Advanced' ? 'selected' : ''}>Advanced</option>
                     </select>
                 </div>
 
                 <div class="field">
-                    <label>Hours available each day</label>
-                    <input name="hours" type="number"
-                        min="1" max="12"
-                        value="${p.hours || 3}" required>
-                </div>
-
-                <div class="field">
-                    <label>Target deadline (optional)</label>
-                    <input name="deadline" type="date"
-                        value="${escapeHtml(p.deadline || '')}">
+                    <label>Daily available hours</label>
+                    <input
+                        name="hours"
+                        type="number"
+                        min="1"
+                        max="12"
+                        value="${p.hours || 3}"
+                        required
+                    >
                 </div>
 
             </div>
 
             <div class="field">
-                <label>Weak areas / priorities</label>
+                <label>Current skills</label>
+                <textarea
+                    name="currentSkills"
+                    placeholder="e.g. C++, Java, SQL, HTML, CSS"
+                    required
+                >${escapeHtml(p.currentSkills || '')}</textarea>
+            </div>
 
-                <textarea name="weakAreas"
-                    placeholder="e.g. DSA, DBMS, Spring Boot">${escapeHtml(
-                        Object.entries(appData.progress)
-                            .filter(([k, v]) => v.percent < 50)
-                            .map(([k]) => k)
-                            .join(', ') || 'DSA, core subjects'
-                    )}</textarea>
+            <div class="field">
+                <label>Target deadline (optional)</label>
+                <input
+                    name="deadline"
+                    type="date"
+                    value="${escapeHtml(p.deadline || '')}"
+                >
             </div>
 
             <button class="primary-btn" type="submit">
-                ✧ Generate my 7-day plan
+                ✧ Generate my personalized roadmap
             </button>
 
-            <p class="helper">.</p>
+            <p class="helper">
+                AI will estimate the preparation duration according to your
+                target role, skills and available time.
+            </p>
 
         </form>
 
-        <div id="planResult">
-            ${
-                appData.plans?.[0]?.text
-                    ? `<div class="plan-wrap">
-                        <div class="plan-recent">Most recent plan</div>
-                        ${renderPlan(
-                            appData.plans[0].structured,
-                            appData.plans[0].text
-                        )}
-                    </div>`
-                    : ''
-            }
+        <div id="planResult"></div>
+
+        <div class="plan-history" style="margin-top:20px;">
+            <div class="plan-recent" style="margin-bottom:10px;">
+                PLAN HISTORY
+            </div>
+
+            <div id="planHistoryList">
+                ${renderPlanHistory()}
+            </div>
         </div>
         `
     );
 
-    bindPlan(appData.plans?.[0]?.structured);
+    bindPlanHistory();
 
     $('#planForm').onsubmit = async e => {
         e.preventDefault();
@@ -956,37 +1469,58 @@ function openPlanner() {
         const f = new FormData(e.target);
         const btn = e.target.querySelector('button');
 
+        const requirements = {
+            role: f.get('role'),
+            level: f.get('level'),
+            hours: Number(f.get('hours')),
+            currentSkills: f.get('currentSkills'),
+            deadline: f.get('deadline')
+        };
+
         btn.disabled = true;
-        btn.textContent = 'Building your plan…';
+        btn.textContent = 'Analyzing your requirements…';
 
         try {
             const res = await api('/api/plan', {
                 method: 'POST',
-                body: JSON.stringify({
-                    role: f.get('role'),
-                    level: f.get('level'),
-                    hours: +f.get('hours'),
-                    deadline: f.get('deadline'),
-                    weakAreas: f.get('weakAreas')
-                })
+                body: JSON.stringify(requirements)
             });
 
-            appData.profile.targetRole = f.get('role');
-            appData.profile.level = f.get('level');
-            appData.profile.hours = +f.get('hours');
-            appData.profile.deadline = f.get('deadline');
+            appData.profile = appData.profile || {};
 
+            Object.assign(appData.profile, {
+                targetRole: requirements.role,
+                level: requirements.level,
+                hours: requirements.hours,
+                currentSkills: requirements.currentSkills,
+                deadline: requirements.deadline
+            });
+
+            // Create a separate roadmap tracker entry
+            const newPlan = {
+                id: `roadmap-${Date.now()}`,
+                title: `${requirements.role} Roadmap`,
+                text: res.plan,
+                structured: res.structured || null,
+                role: requirements.role,
+                level: requirements.level,
+                completedTaskIds: []
+            };
+
+            // Save the newest roadmap in history
             appData.plans = [
-                {
-                    text: res.plan,
-                    structured: res.structured || null,
-                    role: f.get('role'),
-                    level: f.get('level')
-                },
+                newPlan,
                 ...(appData.plans || [])
             ].slice(0, 10);
 
+            // Make the newly generated roadmap active
+            appData.roadmapProgress = appData.roadmapProgress || {};
+            appData.roadmapProgress.activePlanId = newPlan.id;
+
             await persist();
+
+            // Refresh the roadmap dashboard
+            renderRoadmapDashboard();
 
             $('#planResult').innerHTML = `
                 <div class="plan-wrap">
@@ -998,13 +1532,15 @@ function openPlanner() {
                 </div>
             `;
 
-            bindPlan(res.structured);
+            // Refresh saved roadmap history
+            $('#planHistoryList').innerHTML = renderPlanHistory();
+            bindPlanHistory();
 
             $('#copyPlan').onclick = () =>
                 navigator.clipboard.writeText(res.plan)
                     .then(() => notify('Plan copied'));
 
-            notify('Your plan is ready');
+            notify('Your personalized roadmap is ready!');
 
         } catch (err) {
             $('#planResult').innerHTML =
@@ -1012,7 +1548,7 @@ function openPlanner() {
 
         } finally {
             btn.disabled = false;
-            btn.textContent = '✧ Generate my 7-day plan';
+            btn.textContent = '✧ Generate my personalized roadmap';
         }
     };
 }
@@ -1601,7 +2137,7 @@ function openProfile() {
                 </div>
 
                 <div class="field">
-                    <label>Target role</label>
+                    <label>Current Target role</label>
 
                     <input name="targetRole"
                         value="${escapeHtml(p.targetRole || 'Software Developer')}"

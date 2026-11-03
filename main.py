@@ -192,11 +192,18 @@ class ChatPayload(BaseModel):
     history: list[HistoryItem] = Field(default_factory=list)
 
 
+# class PlanPayload(BaseModel):
+#     role: str = "Software Developer"
+#     hours: int = 3
+#     level: str = "Intermediate"
+#     weakAreas: str = "DSA, core subjects"
+#     deadline: str = ""
+
 class PlanPayload(BaseModel):
     role: str = "Software Developer"
-    hours: int = 3
     level: str = "Intermediate"
-    weakAreas: str = "DSA, core subjects"
+    hours: int = 3
+    currentSkills: str = ""
     deadline: str = ""
 
 
@@ -764,94 +771,402 @@ def _extract_json(text: str):
         return None
 
 
+# def normalize_plan(raw, hours: int):
+#     """Validate the model's plan and clamp it to a safe, renderable shape. None if unusable."""
+#     if not isinstance(raw, dict) or not isinstance(raw.get("days"), list):
+#         return None
+#     budget = hours * 60
+#     days = []
+#     for i, day in enumerate(raw["days"][:7], start=1):
+#         if not isinstance(day, dict):
+#             continue
+#         tasks = []
+#         for task in (day.get("tasks") or [])[:6]:
+#             if not isinstance(task, dict) or not str(task.get("title", "")).strip():
+#                 continue
+#             try:
+#                 minutes = int(task.get("minutes", 30))
+#             except (TypeError, ValueError):
+#                 minutes = 30
+#             category = str(task.get("category", "")).strip()
+#             category = next((c for c in PLAN_CATEGORIES if c.lower() == category.lower()), "Domain")
+#             tasks.append({"title": str(task["title"]).strip()[:160], "minutes": max(10, min(minutes, budget)),
+#                           "category": category, "detail": str(task.get("detail", "")).strip()[:300]})
+#         if not tasks:
+#             continue
+#         total = sum(t["minutes"] for t in tasks)
+#         if total > budget:                                    # scale down so a day never exceeds the budget
+#             factor = budget / total
+#             for t in tasks:
+#                 t["minutes"] = max(10, int(t["minutes"] * factor // 5 * 5) or 10)
+#         days.append({"day": i, "title": str(day.get("title", f"Day {i}")).strip()[:80] or f"Day {i}",
+#                      "focus": str(day.get("focus", "")).strip()[:200], "tasks": tasks,
+#                      "totalMinutes": sum(t["minutes"] for t in tasks)})
+#     if not days:
+#         return None
+#     checklist = [str(c).strip()[:160] for c in (raw.get("checklist") or []) if str(c).strip()][:8]
+#     return {"summary": str(raw.get("summary", "")).strip()[:400], "days": days, "checklist": checklist}
+
 def normalize_plan(raw, hours: int):
-    """Validate the model's plan and clamp it to a safe, renderable shape. None if unusable."""
+    """Validate a flexible-duration plan and keep it safe to render."""
+
     if not isinstance(raw, dict) or not isinstance(raw.get("days"), list):
         return None
+
     budget = hours * 60
     days = []
-    for i, day in enumerate(raw["days"][:7], start=1):
+
+    # Flexible duration: allow up to 120 days.
+    for i, day in enumerate(raw["days"][:120], start=1):
+
         if not isinstance(day, dict):
             continue
+
         tasks = []
-        for task in (day.get("tasks") or [])[:6]:
-            if not isinstance(task, dict) or not str(task.get("title", "")).strip():
+
+        for task in (day.get("tasks") or [])[:4]:
+
+            if not isinstance(task, dict):
                 continue
+
+            if not str(task.get("title", "")).strip():
+                continue
+
             try:
                 minutes = int(task.get("minutes", 30))
             except (TypeError, ValueError):
                 minutes = 30
+
+            minutes = max(10, min(minutes, budget))
+
             category = str(task.get("category", "")).strip()
-            category = next((c for c in PLAN_CATEGORIES if c.lower() == category.lower()), "Domain")
-            tasks.append({"title": str(task["title"]).strip()[:160], "minutes": max(10, min(minutes, budget)),
-                          "category": category, "detail": str(task.get("detail", "")).strip()[:300]})
+
+            category = next(
+                (c for c in PLAN_CATEGORIES if c.lower() == category.lower()),
+                "Domain"
+            )
+
+            tasks.append({
+                "title": str(task["title"]).strip()[:160],
+                "minutes": minutes,
+                "category": category,
+                "detail": str(task.get("detail", "")).strip()[:300]
+            })
+
         if not tasks:
             continue
+
+        # Keep daily workload within the available hours.
         total = sum(t["minutes"] for t in tasks)
-        if total > budget:                                    # scale down so a day never exceeds the budget
-            factor = budget / total
-            for t in tasks:
-                t["minutes"] = max(10, int(t["minutes"] * factor // 5 * 5) or 10)
-        days.append({"day": i, "title": str(day.get("title", f"Day {i}")).strip()[:80] or f"Day {i}",
-                     "focus": str(day.get("focus", "")).strip()[:200], "tasks": tasks,
-                     "totalMinutes": sum(t["minutes"] for t in tasks)})
+
+        if total > budget:
+            remaining = budget
+
+            for index, task in enumerate(tasks):
+                if index == len(tasks) - 1:
+                    task["minutes"] = max(10, remaining)
+                else:
+                    allocated = max(
+                        10,
+                        int((task["minutes"] / total) * budget // 5 * 5)
+                    )
+
+                    task["minutes"] = min(allocated, remaining)
+                    remaining -= task["minutes"]
+
+        days.append({
+            "day": len(days) + 1,
+            "title": str(day.get("title", f"Day {i}")).strip()[:80] or f"Day {i}",
+            "focus": str(day.get("focus", "")).strip()[:200],
+            "tasks": tasks,
+            "totalMinutes": sum(t["minutes"] for t in tasks)
+        })
+
     if not days:
         return None
-    checklist = [str(c).strip()[:160] for c in (raw.get("checklist") or []) if str(c).strip()][:8]
-    return {"summary": str(raw.get("summary", "")).strip()[:400], "days": days, "checklist": checklist}
 
+    checklist = [
+        str(c).strip()[:160]
+        for c in (raw.get("checklist") or [])
+        if str(c).strip()
+    ][:12]
+
+    return {
+        "summary": str(raw.get("summary", "")).strip()[:400],
+        "durationDays": len(days),
+        "days": days,
+        "checklist": checklist
+    }
+
+
+# def plan_to_markdown(plan: dict, role: str) -> str:
+#     lines = [f"# 7-day placement plan: {role}"]
+#     if plan.get("summary"):
+#         lines += ["", plan["summary"]]
+#     for day in plan["days"]:
+#         lines += ["", f"## Day {day['day']}: {day['title']} ({day['totalMinutes']} min)"]
+#         if day.get("focus"):
+#             lines.append(f"Focus: {day['focus']}")
+#         for t in day["tasks"]:
+#             lines.append(f"- [{t['category']}] {t['title']} ({t['minutes']} min)" + (f": {t['detail']}" if t["detail"] else ""))
+#     if plan.get("checklist"):
+#         lines += ["", "## Checklist"] + [f"- [ ] {c}" for c in plan["checklist"]]
+#     return "\n".join(lines)
 
 def plan_to_markdown(plan: dict, role: str) -> str:
-    lines = [f"# 7-day placement plan: {role}"]
+
+    duration = plan.get("durationDays", len(plan.get("days", [])))
+
+    lines = [
+        f"# Personalized {duration}-day preparation plan: {role}"
+    ]
+
     if plan.get("summary"):
         lines += ["", plan["summary"]]
+
     for day in plan["days"]:
-        lines += ["", f"## Day {day['day']}: {day['title']} ({day['totalMinutes']} min)"]
+
+        lines += [
+            "",
+            f"## Day {day['day']}: {day['title']} "
+            f"({day['totalMinutes']} min)"
+        ]
+
         if day.get("focus"):
             lines.append(f"Focus: {day['focus']}")
-        for t in day["tasks"]:
-            lines.append(f"- [{t['category']}] {t['title']} ({t['minutes']} min)" + (f": {t['detail']}" if t["detail"] else ""))
+
+        for task in day["tasks"]:
+            lines.append(
+                f"- [{task['category']}] {task['title']} "
+                f"({task['minutes']} min)"
+                + (f": {task['detail']}" if task["detail"] else "")
+            )
+
     if plan.get("checklist"):
-        lines += ["", "## Checklist"] + [f"- [ ] {c}" for c in plan["checklist"]]
+        lines += ["", "## Completion checklist"]
+
+        lines += [
+            f"- [ ] {item}"
+            for item in plan["checklist"]
+        ]
+
     return "\n".join(lines)
+
+
+# @app.post("/api/plan")
+# def create_plan(payload: PlanPayload, user: dict = Depends(current_user)):
+#     hours = max(1, min(payload.hours, 12))
+#     prompt = f"""You are HireFlow AI, a practical placement mentor for Indian college students.
+# Create a realistic 7-day placement-preparation plan and answer with ONLY one JSON object
+# (no Markdown, no commentary) in exactly this shape:
+# {{"summary": "one short encouraging, honest sentence about the plan",
+#  "days": [{{"day": 1, "title": "short theme", "focus": "one short sentence on today's goal",
+#    "tasks": [{{"title": "specific task", "minutes": 45,
+#      "category": "one of: {', '.join(PLAN_CATEGORIES)}",
+#      "detail": "at most 12 words: what exactly to do, e.g. problem names or topics"}}]}}],
+#  "checklist": ["4 short items to tick off by the end of the week"]}}
+# Rules: exactly 7 days; 2-3 tasks per day; every task has a duration in minutes (multiples of 5);
+# the total minutes of a day must not exceed {hours * 60}. Include DSA, core CS subjects, aptitude,
+# target-role skills, revision, and at least one task with category "Mock Interview". Adapt the
+# workload to the student's level and weak areas. Do not promise placement outcomes.
+# Target role: {payload.role}
+# Level: {payload.level}
+# Available time per day: {hours} hours
+# Weak areas: {payload.weakAreas}
+# Deadline: {payload.deadline or 'not specified'}"""
+#     result = gemini_text(prompt, max_tokens=3500, timeout=45)
+#     structured = normalize_plan(_extract_json(result), hours)
+#     if structured is None:
+#         # Model ignored the JSON format: still return something useful (plain Markdown view).
+#         logger.warning("Planner answer was not valid JSON; returning Markdown fallback.")
+#         text, structured = result, None
+#     else:
+#         text = plan_to_markdown(structured, payload.role)
+#     data = load_data(user["id"])
+#     data.setdefault("plans", []).insert(0, {
+#         "text": text, "structured": structured, "role": payload.role, "hours": hours,
+#         "level": payload.level, "createdAt": datetime.now(timezone.utc).isoformat()})
+#     del data["plans"][10:]
+#     save_data(user["id"], data)
+#     return {"plan": text, "structured": structured}
 
 
 @app.post("/api/plan")
 def create_plan(payload: PlanPayload, user: dict = Depends(current_user)):
+
     hours = max(1, min(payload.hours, 12))
-    prompt = f"""You are HireFlow AI, a practical placement mentor for Indian college students.
-Create a realistic 7-day placement-preparation plan and answer with ONLY one JSON object
-(no Markdown, no commentary) in exactly this shape:
-{{"summary": "one short encouraging, honest sentence about the plan",
- "days": [{{"day": 1, "title": "short theme", "focus": "one short sentence on today's goal",
-   "tasks": [{{"title": "specific task", "minutes": 45,
-     "category": "one of: {', '.join(PLAN_CATEGORIES)}",
-     "detail": "at most 12 words: what exactly to do, e.g. problem names or topics"}}]}}],
- "checklist": ["4 short items to tick off by the end of the week"]}}
-Rules: exactly 7 days; 2-3 tasks per day; every task has a duration in minutes (multiples of 5);
-the total minutes of a day must not exceed {hours * 60}. Include DSA, core CS subjects, aptitude,
-target-role skills, revision, and at least one task with category "Mock Interview". Adapt the
-workload to the student's level and weak areas. Do not promise placement outcomes.
+
+    # Calculate available days from the deadline
+    today = datetime.now().date()
+    deadline_days = None
+
+    if payload.deadline:
+        try:
+            deadline_date = datetime.strptime(
+                payload.deadline, "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid deadline. Please select a valid date."
+            )
+
+        deadline_days = (deadline_date - today).days + 1
+
+        if deadline_days <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Your deadline has already passed. Please select a future date."
+            )
+
+    if deadline_days is not None:
+        duration_instruction = f"""
+The student has a deadline of {payload.deadline}.
+
+Today's date: {today.isoformat()}
+
+Available preparation days: {deadline_days} days.
+
+Create a realistic roadmap that finishes on or before this deadline.
+
+Use the available preparation days and daily study hours to
+distribute the workload.
+
+If the deadline is too short:
+- Prioritize the most important skills.
+- Include essential practice and revision.
+- Clearly explain which topics may remain incomplete.
+- Do not pretend that the entire syllabus can be mastered.
+"""
+    else:
+        duration_instruction = f"""
+The student has not provided a deadline.
+
+Independently estimate the preparation duration using:
+- Target role requirements.
+- Current preparation level.
+- Existing skills.
+- Total learning workload.
+- Daily available study hours ({hours} hours).
+
+Choose a realistic duration between 1 and 120 days.
+Do not use an arbitrary fixed duration.
+"""
+
+    prompt = f"""
+You are HireFlow AI, an expert personalized placement preparation mentor
+for Indian college students.
+
+Create a realistic, personalized preparation roadmap based on the
+student's target role, preparation level, existing skills,
+daily available hours and deadline.
+
+IMPORTANT DURATION RULES:
+
+1. Daily available hours and the deadline are the primary scheduling
+   constraints.
+2. Never randomly choose 7, 14, 30 or 60 days.
+3. Never overload a day beyond the available study hours.
+4. Calculate the workload before distributing tasks.
+5. Arrange topics from prerequisites to advanced concepts.
+6. Include learning, coding practice, projects, revision and assessment.
+
+{duration_instruction}
+
+Return ONLY one valid JSON object without Markdown or commentary.
+
+Use exactly this structure:
+
+{{
+  "summary": "Explain the duration, workload and overall preparation strategy.",
+  "days": [
+    {{
+      "day": 1,
+      "title": "Short daily theme",
+      "focus": "What the student should achieve today",
+      "tasks": [
+        {{
+          "title": "Specific learning or practice task",
+          "minutes": 60,
+          "category": "one of: {', '.join(PLAN_CATEGORIES)}",
+          "detail": "Specific topics, exercises or resources"
+        }}
+      ]
+    }}
+  ],
+  "checklist": [
+    "Important milestone to complete"
+  ]
+}}
+
+RULES:
+
+1. Generate one entry for every scheduled preparation day.
+2. When a deadline is provided, do not schedule tasks beyond it.
+3. Generate 2-3 meaningful tasks per day.
+4. Every task must have a duration in minutes, preferably multiples of 5.
+5. Total daily task duration must not exceed {hours * 60} minutes.
+6. Identify important skills required for the target role.
+7. Arrange topics in a logical learning sequence.
+8. Include learning, coding practice, projects, revision and assessments.
+9. Include mock interviews when relevant.
+10. Avoid repeating identical tasks unnecessarily.
+11. Give specific tasks instead of vague instructions.
+12. Make the plan achievable for a college student.
+13. Never promise placement outcomes.
+14. Clearly explain the estimated duration in the summary.
+15. The number of entries in days must match the scheduled duration.
+16. Use the focus field to explain the day's learning objective
+    BEFORE listing its tasks.
+
+STUDENT REQUIREMENTS:
+
 Target role: {payload.role}
-Level: {payload.level}
-Available time per day: {hours} hours
-Weak areas: {payload.weakAreas}
-Deadline: {payload.deadline or 'not specified'}"""
-    result = gemini_text(prompt, max_tokens=3500, timeout=45)
+
+Preparation level: {payload.level}
+
+Current skills: {payload.currentSkills or 'Not specified'}
+
+Daily available study time: {hours} hours
+
+Deadline: {payload.deadline or 'No fixed deadline'}
+
+Create the most useful and realistic personalized roadmap possible.
+"""
+
+    result = gemini_text(prompt, max_tokens=8000, timeout=90)
+
     structured = normalize_plan(_extract_json(result), hours)
+
     if structured is None:
-        # Model ignored the JSON format: still return something useful (plain Markdown view).
-        logger.warning("Planner answer was not valid JSON; returning Markdown fallback.")
+        logger.warning(
+            "Planner answer was not valid JSON; returning Markdown fallback."
+        )
         text, structured = result, None
+
     else:
         text = plan_to_markdown(structured, payload.role)
+
     data = load_data(user["id"])
+
     data.setdefault("plans", []).insert(0, {
-        "text": text, "structured": structured, "role": payload.role, "hours": hours,
-        "level": payload.level, "createdAt": datetime.now(timezone.utc).isoformat()})
+        "text": text,
+        "structured": structured,
+        "role": payload.role,
+        "hours": hours,
+        "level": payload.level,
+        "deadline": payload.deadline,
+        "createdAt": datetime.now(timezone.utc).isoformat()
+    })
+
     del data["plans"][10:]
+
     save_data(user["id"], data)
-    return {"plan": text, "structured": structured}
+
+    return {
+        "plan": text,
+        "structured": structured
+    }
 
 
 CHAT_SYSTEM_PROMPT = """You are HireFlow AI, a friendly, practical placement-preparation mentor for Indian engineering students.
