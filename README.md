@@ -15,10 +15,11 @@ A clean, responsive placement-preparation workspace inspired by the supplied ref
 - **RAG chatbot:** ask placement and study questions. Bot replies render Markdown as formatted headings, lists, bold text, links, and code blocks (not raw `**`, `###`, or literal `\n` sequences). Add your own TXT/Markdown notes using the knowledge-base upload (right-click the sidebar chat launcher for a quick shortcut, or use the endpoint `/api/knowledge-base`).
 - **Profile editing:** save name, target role, skill level, and daily study hours.
 
-## Dashboard UI
+## UI
 
 <!-- <img width="1731" height="1288" alt="image" src="https://github.com/user-attachments/assets/660081d2-28df-468e-b161-a12335e4be10" /> -->
-<img width="1731" height="1549" alt="image" src="https://github.com/user-attachments/assets/2b030f3f-bf2d-45b4-a465-953133dca5f3" />
+<img width="1731" height="1502" alt="image" src="https://github.com/user-attachments/assets/de268c0a-2f13-414f-bb58-86c912fd4e52" />
+
 
 
 ## Requirements
