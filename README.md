@@ -17,7 +17,9 @@ A clean, responsive placement-preparation workspace inspired by the supplied ref
 
 ## Dashboard UI
 
-<img width="1731" height="1288" alt="image" src="https://github.com/user-attachments/assets/660081d2-28df-468e-b161-a12335e4be10" />
+<!-- <img width="1731" height="1288" alt="image" src="https://github.com/user-attachments/assets/660081d2-28df-468e-b161-a12335e4be10" /> -->
+<img width="1731" height="1549" alt="image" src="https://github.com/user-attachments/assets/2b030f3f-bf2d-45b4-a465-953133dca5f3" />
+
 
 ## Requirements
 
