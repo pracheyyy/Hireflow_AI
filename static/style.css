@@ -383,3 +383,28 @@
     background: #FFE7B8 !important;
     transform: translateY(-2px);
 }
+
+/* Compact Active Roadmap Card */
+
+#roadmapDashboard .roadmap-dashboard-card {
+    padding: 16px 24px !important;
+    gap: 22px;
+    border-radius: 18px;
+}
+
+#roadmapDashboard .roadmap-dashboard-info h2 {
+    margin: 6px 0;
+    font-size: 19px;
+}
+
+#roadmapDashboard .roadmap-dashboard-info p {
+    margin-top: 4px;
+}
+
+#roadmapDashboard .roadmap-progress-details {
+    margin-bottom: 8px;
+}
+
+#roadmapDashboard #openActiveRoadmap {
+    padding: 12px 18px;
+}

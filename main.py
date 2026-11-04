@@ -253,12 +253,28 @@ OPPORTUNITIES = [
 ]
 
 
+# @app.get("/", response_class=HTMLResponse)
+# def home():
+#     index_file = STATIC_PATH / "index.html"
+#     if not index_file.exists():
+#         raise HTTPException(500, "Frontend file static/index.html was not found.")
+#     return index_file.read_text(encoding="utf-8")
+
+
+# @app.get("/login", response_class=HTMLResponse)
+# def login_page():
+#     page = STATIC_PATH / "login.html"
+#     if not page.exists():
+#         raise HTTPException(500, "Frontend file static/login.html was not found.")
+#     return HTMLResponse(page.read_text(encoding="utf-8"), headers={"Cache-Control": "no-store"})
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
-    index_file = STATIC_PATH / "index.html"
-    if not index_file.exists():
-        raise HTTPException(500, "Frontend file static/index.html was not found.")
-    return index_file.read_text(encoding="utf-8")
+    page = STATIC_PATH / "landing.html"
+    if not page.exists():
+        raise HTTPException(500, "Frontend file static/landing.html was not found.")
+    return HTMLResponse(page.read_text(encoding="utf-8"))
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -266,7 +282,21 @@ def login_page():
     page = STATIC_PATH / "login.html"
     if not page.exists():
         raise HTTPException(500, "Frontend file static/login.html was not found.")
-    return HTMLResponse(page.read_text(encoding="utf-8"), headers={"Cache-Control": "no-store"})
+    return HTMLResponse(
+        page.read_text(encoding="utf-8"),
+        headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard_page():
+    page = STATIC_PATH / "index.html"
+    if not page.exists():
+        raise HTTPException(500, "Frontend file static/index.html was not found.")
+    return HTMLResponse(
+        page.read_text(encoding="utf-8"),
+        headers={"Cache-Control": "no-store"}
+    )
 
 
 @app.get("/api/health")
